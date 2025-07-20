@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tilelify</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+  :root {
+    --tile-size: calc(75vw / var(--cols));
+    --gap: 6px;
+    --bg-dark: #121212;
+    --tile-color: #2c2c2c;
+    --tile-color-light: #ddd;
+    --highlight-color: #00ff88;
+    --wrong-color: #ff4d4d;
+    --neutral-color: #999999;
+    --font-family: 'Poppins', sans-serif;
+  }
+  body {
+    margin: 0; padding: 20px;
+    font-family: var(--font-family);
+    background: var(--bg-dark);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    justify-content: flex-end;
+  }
+  h1 {
+    font-weight: 700;
+    font-size: 2.4rem;
+    margin-bottom: 16px;
+  }
+  #game {
+    display: grid;
+    gap: var(--gap);
+    width: 75vw;
+    max-width: 600px;
+    aspect-ratio: 1 / 1;
+    grid-template-columns: repeat(var(--cols), 1fr);
+    grid-template-rows: repeat(var(--rows), 1fr);
+    user-select: none;
+    border-radius: 12px;
+  }
+  .tile {
+    background: var(--tile-color);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #eee;
+    transition: background 0.3s, color 0.3s;
+    user-select: none;
+  }
+  .tile.correct {
+    background: var(--highlight-color);
+    color: #121212;
+  }
+  .tile.incorrect {
+    background: var(--wrong-color);
+    color: #fff;
+  }
+  .tile.neutral {
+    background: var(--neutral-color);
+  }
+  button {
+    margin-top: 20px;
+    padding: 12px 28px;
+    font-size: 1rem;
+    border: none;
+    background: #00c896;
+    color: white;
+    border-radius: 10px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    font-family: var(--font-family);
+    box-shadow: 0 4px 8px rgba(0, 200, 150, 0.4);
+    transition: background 0.25s ease;
+  }
+  button:disabled {
+    background: #555;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  button:hover:not(:disabled) {
+    background: #00b07a;
+  }
+  label {
+    margin-top: 20px;
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  input[type=number] {
+    margin-left: 8px;
+    width: 60px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1.5px solid #444;
+    background: #222;
+    color: #eee;
+    padding: 4px 8px;
+    font-family: var(--font-family);
+    transition: border-color 0.3s;
+  }
+  input[type=number]:focus {
+    outline: none;
+    border-color: #00c896;
+  }
+  #controls {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    width: 75vw;
+    max-width: 600px;
+  }
+</style>
+</head>
+<body>
+  <h1>Tilelify</h1>
+
+  <div id="controls">
+    <label>Rows:
+      <input id="inputRows" type="number" min="3" max="15" value="7" />
+    </label>
+    <label>Cols:
+      <input id="inputCols" type="number" min="3" max="15" value="5" />
+    </label>
+    <button id="startBtn">Start Game</button>
+    <button id="showSeqBtn" disabled>Show Sequence</button>
+  </div>
+
+  <div id="game"></div>
+
+<script>
+  let rows = 7;
+  let cols = 5;
+  let path = [];
+  let currentStep = 0;
+  let gameStarted = false;
+  let playerMoved = false;
+
+  const root = document.documentElement;
+  const game = document.getElementById("game");
+  const inputRows = document.getElementById("inputRows");
+  const inputCols = document.getElementById("inputCols");
+  const startBtn = document.getElementById("startBtn");
+  const showSeqBtn = document.getElementById("showSeqBtn");
+
+  function generateSnakePath(rows, cols) {
+    let path = [];
+    let currentCol = Math.floor(cols / 2);
+    for (let r = 0; r < rows; r++) {
+      path.push(currentCol);
+      let options = [currentCol];
+      if (currentCol > 0) options.push(currentCol - 1);
+      if (currentCol < cols - 1) options.push(currentCol + 1);
+      let nextCol;
+      do {
+        nextCol = options[Math.floor(Math.random() * options.length)];
+      } while (nextCol === currentCol && r > 0);
+      currentCol = nextCol;
+    }
+    return path;
+  }
+
+  function renderBoard() {
+    root.style.setProperty('--rows', rows);
+    root.style.setProperty('--cols', cols);
+
+    game.innerHTML = "";
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const tile = document.createElement("div");
+        tile.classList.add("tile");
+        tile.dataset.row = r;
+        tile.dataset.col = c;
+
+        // bottom to top visual mapping
+        const visualRow = rows - 1 - r;
+        tile.style.gridRowStart = visualRow + 1;
+        tile.style.gridColumnStart = c + 1;
+
+        tile.onclick = () => handleClick(r, c, tile);
+        game.appendChild(tile);
+      }
+    }
+  }
+
+  function showSequence() {
+    if (playerMoved) return;
+
+    let delay = 0;
+    clearAllHighlights();
+
+    for (let r = 0; r < rows; r++) {
+      setTimeout(() => {
+        highlightRow(r);
+        if (r === rows - 1) {
+          setTimeout(() => {
+            clearAllHighlights();
+          }, 800);
+        }
+      }, delay);
+      delay += 900;
+    }
+  }
+
+  function highlightRow(r) {
+    const correctCol = path[r];
+    document.querySelectorAll(".tile").forEach(tile => {
+      const tr = parseInt(tile.dataset.row);
+      const tc = parseInt(tile.dataset.col);
+      tile.classList.remove("correct", "incorrect", "neutral");
+
+      if (tr === r) {
+        if (tc === correctCol) tile.classList.add("correct");
+        else tile.classList.add("neutral");
+      }
+    });
+  }
+
+  function clearAllHighlights() {
+    document.querySelectorAll(".tile").forEach(tile => {
+      tile.classList.remove("correct", "incorrect", "neutral");
+    });
+  }
+
+  function handleClick(r, c, tile) {
+    if (!gameStarted) return;
+    if (r !== currentStep) return;
+
+    playerMoved = true;
+    showSeqBtn.disabled = true;
+
+    if (path[r] === c) {
+      tile.classList.add("correct");
+      currentStep++;
+      if (currentStep === rows) {
+        setTimeout(() => {
+          alert("Game Over. You completed the pattern!");
+          resetGame();
+        }, 300);
+      }
+    } else {
+      tile.classList.add("incorrect");
+      setTimeout(() => {
+        alert("Wrong tile! Try again.");
+        resetGame();
+      }, 300);
+    }
+  }
+
+  function resetGame() {
+    currentStep = 0;
+    playerMoved = false;
+    showSeqBtn.disabled = false;
+    gameStarted = false;
+    renderBoard();
+  }
+
+  startBtn.onclick = () => {
+    let newRows = parseInt(inputRows.value);
+    let newCols = parseInt(inputCols.value);
+
+    if (isNaN(newRows) || newRows < 3 || newRows > 15) {
+      alert("Rows must be between 3 and 15");
+      return;
+    }
+    if (isNaN(newCols) || newCols < 3 || newCols > 15) {
+      alert("Cols must be between 3 and 15");
+      return;
+    }
+
+    rows = newRows;
+    cols = newCols;
+    root.style.setProperty('--rows', rows);
+    root.style.setProperty('--cols', cols);
+
+    path = generateSnakePath(rows, cols);
+    currentStep = 0;
+    playerMoved = false;
+    gameStarted = true;
+    showSeqBtn.disabled = false;
+    renderBoard();
+  };
+
+  showSeqBtn.onclick = () => {
+    if (!playerMoved && gameStarted) {
+      showSequence();
+    }
+  };
+
+  // Initial render
+  renderBoard();
+</script>
+</body>
+</html>
